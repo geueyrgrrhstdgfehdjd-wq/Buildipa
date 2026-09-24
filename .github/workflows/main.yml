@@ -1,4 +1,4 @@
-name: Build Unsigned iOS IPA for External Signing
+name: Build Unsigned iOS IPA
 
 on:
   push:
@@ -17,30 +17,25 @@ jobs:
 
       - name: Create Unsigned App Package & Build IPA
         run: |
-          # 1. สร้างไดเรกทอรีโครงสร้างแอป
           mkdir -p build/IPA/Payload/NabeeCode.app
           APP_DIR="build/IPA/Payload/NabeeCode.app"
 
-          # 2. คัดลอกไฟล์ทั้งหมดที่มีใน Repository เข้าไปในโฟลเดอร์แอปโดยตรง
-          echo "Copying files from repository..."
+          echo "Copying repository files..."
           find . -maxdepth 2 -type f ! -path "./build/*" ! -path "./.git/*" ! -path "./.github/*" -exec cp {} "$APP_DIR/" \;
 
-          # คัดลอกโฟลเดอร์ภาษาและโฟลเดอร์ย่อยอื่นๆ (ถ้ามี)
           find . -maxdepth 1 -type d -name "*.lproj" -exec cp -r {} "$APP_DIR/" \;
           find . -maxdepth 1 -type d -name "*.xcassets" -exec cp -r {} "$APP_DIR/" \;
 
-          # 3. สร้างไฟล์ Executable สำหรับโครงสร้าง iOS App
-          cat <<EOF > main.swift
-import Foundation
-print("NabeeCode App Loaded")
-EOF
+          cat << 'EOF' > main.swift
+          import Foundation
+          print("NabeeCode App Loaded")
+          EOF
+
           swiftc -target arm64-apple-ios15.0-simulator main.swift -o "$APP_DIR/NabeeCode" || true
 
-          # 4. บีบอัดโฟลเดอร์ Payload ออกมาเป็นไฟล์ .ipa
           cd build/IPA
           zip -r Unsigned_App.ipa Payload
-
-          echo "=== สร้างไฟล์ Unsigned_App.ipa เรียบร้อยแล้ว ==="
+          echo "Build Completed Successfully"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
