@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch: # ปุ่มกดสั่งสั่ง Run บน GitHub
+  workflow_dispatch:
 
 jobs:
   build-ios:
@@ -23,14 +23,24 @@ jobs:
       - name: Clean and Archive Project (No Code Sign)
         run: |
           mkdir -p build
-          
-          # ค้นหาไฟล์ .xcworkspace หรือ .xcodeproj
-          if [ -d "*.xcworkspace" ]; then
-            WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
-            SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
+
+          # ค้นหาไฟล์ .xcodeproj หรือ .xcworkspace โดยอัตโนมัติ
+          PROJ_FILE=$(find . -maxdepth 2 -name "*.xcworkspace" -o -name "*.xcodeproj" | head -n 1)
+
+          if [ -z "$PROJ_FILE" ]; then
+            echo "Error: ไม่พบไฟล์ .xcodeproj หรือ .xcworkspace ใน Repository"
+            exit 1
+          fi
+
+          echo "Found project file: $PROJ_FILE"
+
+          # ตรวจสอบว่าเป็น workspace หรือ project
+          if [[ "$PROJ_FILE" == *.xcworkspace ]]; then
+            # ดึงชื่อ Scheme แรกที่พบ
+            SCHEME=$(xcodebuild -workspace "$PROJ_FILE" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
             
             xcodebuild archive \
-              -workspace "$WORKSPACE" \
+              -workspace "$PROJ_FILE" \
               -scheme "$SCHEME" \
               -configuration Release \
               -archivePath build/App.xcarchive \
@@ -39,11 +49,10 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               clean archive
           else
-            PROJECT=$(ls -d *.xcodeproj | head -n 1)
-            SCHEME=$(xcodebuild -project "$PROJECT" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
+            SCHEME=$(xcodebuild -project "$PROJ_FILE" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
             
             xcodebuild archive \
-              -project "$PROJECT" \
+              -project "$PROJ_FILE" \
               -scheme "$SCHEME" \
               -configuration Release \
               -archivePath build/App.xcarchive \
@@ -57,10 +66,10 @@ jobs:
         run: |
           mkdir -p build/IPA/Payload
           
-          # คัดลอกโฟลเดอร์ .app จาก archive ออกมาใส่ในโฟลเดอร์ Payload
+          # คัดลอกโฟลเดอร์ .app จาก archive ออกมา
           cp -r build/App.xcarchive/Products/Applications/*.app build/IPA/Payload/
           
-          # บีบอัดโฟลเดอร์ Payload ให้กลายเป็นไฟล์ .ipa
+          # บีบอัดโฟลเดอร์ Payload เป็น .ipa
           cd build/IPA
           zip -r Unsigned_App.ipa Payload
           
