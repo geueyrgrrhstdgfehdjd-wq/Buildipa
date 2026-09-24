@@ -1,15 +1,15 @@
-name: Build and Export iOS IPA
+name: Build Unsigned iOS IPA for External Signing
 
 on:
   push:
     branches:
       - main
       - master
-  workflow_dispatch: # ปุ่มสำหรับกดสั่ง Run ได้เองบน GitHub
+  workflow_dispatch: # ปุ่มกดสั่งสั่ง Run บน GitHub
 
 jobs:
   build-ios:
-    runs-on: macos-14 # หรือ macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Checkout Repository
@@ -20,41 +20,54 @@ jobs:
         with:
           xcode-version: 'latest-stable'
 
-      - name: Install Signing Certificate & Provisioning Profile
-        env:
-          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      - name: Clean and Archive Project (No Code Sign)
         run: |
-          # 1. สร้าง Keychain ชั่วคราว
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          xcodebuild -version
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          mkdir -p build
+          
+          # ค้นหาไฟล์ .xcworkspace หรือ .xcodeproj
+          if [ -d "*.xcworkspace" ]; then
+            WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+            SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
+            
+            xcodebuild archive \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -archivePath build/App.xcarchive \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              clean archive
+          else
+            PROJECT=$(ls -d *.xcodeproj | head -n 1)
+            SCHEME=$(xcodebuild -project "$PROJECT" -list | grep -A 10 "Schemes:" | tail -n +2 | head -n 1 | xargs)
+            
+            xcodebuild archive \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -archivePath build/App.xcarchive \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              clean archive
+          fi
 
-          # 2. ถอดรหัส Certificate (.p12) แล้วใส่ใน Keychain
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          security import $CERTIFICATE_PATH -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -A -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychains -s $KEYCHAIN_PATH
-
-          # 3. ถอดรหัส Provisioning Profile
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
-
-      - name: Make Build Script Executable
-        run: chmod +x ./build_ipa.sh
-
-      - name: Run IPA Build Script
-        run: ./build_ipa.sh
+      - name: Package Payload into .ipa
+        run: |
+          mkdir -p build/IPA/Payload
+          
+          # คัดลอกโฟลเดอร์ .app จาก archive ออกมาใส่ในโฟลเดอร์ Payload
+          cp -r build/App.xcarchive/Products/Applications/*.app build/IPA/Payload/
+          
+          # บีบอัดโฟลเดอร์ Payload ให้กลายเป็นไฟล์ .ipa
+          cd build/IPA
+          zip -r Unsigned_App.ipa Payload
+          
+          echo "สร้างไฟล์ Unsigned_App.ipa สำเร็จ"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NabeeCode-IPA
-          path: build/IPA/*.ipa
+          name: Unsigned-IPA-for-Gbox
+          path: build/IPA/Unsigned_App.ipa
