@@ -15,38 +15,39 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Package IPA Structure correctly
+      - name: Set Dynamic Filename (Timestamp)
         run: |
-          # 1. เคลียร์โฟลเดอร์ build เก่าทั้งหมด
+          # สร้างข้อความเวลา เช่น 20260924_080512
+          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
+          echo "IPA_NAME=nextra_${TIMESTAMP}.ipa" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=cracknabee-ipa-${TIMESTAMP}" >> $GITHUB_ENV
+
+      - name: Build Unsigned IPA for Gbox
+        run: |
+          # 1. ล้างโฟลเดอร์ build เก่า
           rm -rf build
           
-          # 2. สร้างโครงสร้างหลักตามมาตรฐาน iOS
-          mkdir -p build/Payload/NabeeCode.app
-          APP_DIR="build/Payload/NabeeCode.app"
+          # 2. สร้างโครงสร้าง Payload/NABEE HEX.app ให้ตรงตามโปรเจกต์
+          mkdir -p "build/Payload/NABEE HEX.app"
+          APP_DIR="build/Payload/NABEE HEX.app"
 
-          # 3. คัดลอกไฟล์ทั้งหมดจาก Repo เข้าไปในตัวแอป
+          # 3. คัดลอกไฟล์ทั้งหมดใน Repo เข้าไปในตัวแอป
           cp -R ./* "$APP_DIR/" 2>/dev/null || true
-
-          # ลบโฟลเดอร์ขยะของ GitHub ออกจากตัวแอป
+          
+          # 4. ลบโฟลเดอร์ขยะ
           rm -rf "$APP_DIR/build" "$APP_DIR/.git" "$APP_DIR/.github"
 
-          # 4. ค้นหาไฟล์ Info.plist เดิมใน Repo แล้วก๊อปปี้มาไว้ที่ชั้นนอกสุดของ .app
-          PLIST_PATH=$(find . -name "Info.plist" -not -path "./build/*" | head -n 1)
-          if [ -n "$PLIST_PATH" ]; then
-            cp "$PLIST_PATH" "$APP_DIR/Info.plist"
-          fi
-
-          # 5. สร้าง Executable Binary สำหรับตัวแอป
+          # 5. คอมไพล์ Binary ปลอมชื่อ NABEE HEX
           echo 'int main() { return 0; }' > main.c
-          clang -arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) main.c -o "$APP_DIR/NabeeCode" || true
+          clang -arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) main.c -o "$APP_DIR/NABEE HEX" || true
           rm -f main.c
 
-          # 6. บีบอัดโฟลเดอร์ Payload เป็นไฟล์ nextra.ipa
+          # 6. บีบอัดเป็นไฟล์ .ipa ด้วยชื่อไดนามิก
           cd build
-          zip -q -r -9 nextra.ipa Payload
+          zip -q -r -9 "${{ env.IPA_NAME }}" Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cracknabee-ipa
-          path: build/nextra.ipa
+          name: ${{ env.ARTIFACT_NAME }}
+          path: build/${{ env.IPA_NAME }}
