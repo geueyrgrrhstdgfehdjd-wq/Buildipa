@@ -28,14 +28,12 @@ jobs:
           # 3. ลบโฟลเดอร์ขยะที่ไม่จำเป็นในแอปออก
           rm -rf "$APP_DIR/build" "$APP_DIR/.git" "$APP_DIR/.github"
 
-          # 4. สร้าง Executable Binary ปลอมเพื่อให้โครงสร้างแอปสมบูรณ์
+          # 4. สร้าง Executable Binary ปลอมแบบปลอดภัย (ไม่ต้องใช้ EOF)
           if [ ! -f "$APP_DIR/NabeeCode" ]; then
-            cat << 'EOF' > main.swift
-            import Foundation
-            print("NabeeCode App Loaded")
-            EOF
+            echo "import Foundation" > main.swift
+            echo 'print("NabeeCode App Loaded")' >> main.swift
             swiftc -target arm64-apple-ios15.0-simulator main.swift -o "$APP_DIR/NabeeCode" || true
-            rm main.swift
+            rm -f main.swift
           fi
 
           # 5. บีบอัด Payload เป็นไฟล์ .ipa
