@@ -17,34 +17,33 @@ jobs:
 
       - name: Package IPA Structure correctly
         run: |
-          # 1. ล้างไดเรกทอรี build เก่า
+          # 1. เคลียร์โฟลเดอร์ build เก่าทั้งหมด
           rm -rf build
           
-          # 2. สร้างโครงสร้างตามมาตรฐาน iOS: Payload/NabeeCode.app
+          # 2. สร้างโครงสร้างหลักตามมาตรฐาน iOS
           mkdir -p build/Payload/NabeeCode.app
           APP_DIR="build/Payload/NabeeCode.app"
 
-          # 3. คัดลอกไฟล์ทั้งหมดจาก Repository เข้าไปไว้ในตัวแอป
+          # 3. คัดลอกไฟล์ทั้งหมดจาก Repo เข้าไปในตัวแอป
           cp -R ./* "$APP_DIR/" 2>/dev/null || true
-          
+
           # ลบโฟลเดอร์ขยะของ GitHub ออกจากตัวแอป
           rm -rf "$APP_DIR/build" "$APP_DIR/.git" "$APP_DIR/.github"
 
-          # 4. ตรวจสอบให้มั่นใจว่าไฟล์ Info.plist อยู่นอกสุดของโฟลเดอร์ .app
-          FIND_PLIST=$(find . -name "Info.plist" -not -path "./build/*" | head -n 1)
-          if [ -n "$FIND_PLIST" ]; then
-            cp "$FIND_PLIST" "$APP_DIR/Info.plist"
+          # 4. ค้นหาไฟล์ Info.plist เดิมใน Repo แล้วก๊อปปี้มาไว้ที่ชั้นนอกสุดของ .app
+          PLIST_PATH=$(find . -name "Info.plist" -not -path "./build/*" | head -n 1)
+          if [ -n "$PLIST_PATH" ]; then
+            cp "$PLIST_PATH" "$APP_DIR/Info.plist"
           fi
 
-          # 5. สร้าง Executable Binary พื้นฐานเพื่อเปิดตัวแอป
-          echo "import Foundation" > main.swift
-          echo 'print("App Loaded")' >> main.swift
-          swiftc -target arm64-apple-ios15.0 main.swift -o "$APP_DIR/NabeeCode" || true
-          rm -f main.swift
+          # 5. สร้าง Executable Binary สำหรับตัวแอป
+          echo 'int main() { return 0; }' > main.c
+          clang -arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) main.c -o "$APP_DIR/NabeeCode" || true
+          rm -f main.c
 
-          # 6. บีบอัดเฉพาะโฟลเดอร์ Payload เป็นไฟล์ nextra.ipa
+          # 6. บีบอัดโฟลเดอร์ Payload เป็นไฟล์ nextra.ipa
           cd build
-          zip -r -9 nextra.ipa Payload
+          zip -q -r -9 nextra.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
