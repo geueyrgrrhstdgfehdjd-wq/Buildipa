@@ -17,28 +17,34 @@ jobs:
 
       - name: Create Unsigned App Package & Build IPA
         run: |
-          mkdir -p build/IPA/Payload/NabeeCode.app
-          APP_DIR="build/IPA/Payload/NabeeCode.app"
+          # 1. เตรียมโฟลเดอร์โครงสร้างหลัก
+          rm -rf build
+          mkdir -p build/Payload/NabeeCode.app
+          APP_DIR="build/Payload/NabeeCode.app"
 
-          echo "Copying repository files..."
-          find . -maxdepth 2 -type f ! -path "./build/*" ! -path "./.git/*" ! -path "./.github/*" -exec cp {} "$APP_DIR/" \;
+          # 2. คัดลอกไฟล์ทั้งหมดใน Repo เข้าไปใน NabeeCode.app โดยตรง
+          cp -r ./* "$APP_DIR/" 2>/dev/null || true
 
-          find . -maxdepth 1 -type d -name "*.lproj" -exec cp -r {} "$APP_DIR/" \;
-          find . -maxdepth 1 -type d -name "*.xcassets" -exec cp -r {} "$APP_DIR/" \;
+          # 3. ลบโฟลเดอร์ขยะที่ไม่จำเป็นในแอปออก
+          rm -rf "$APP_DIR/build" "$APP_DIR/.git" "$APP_DIR/.github"
 
-          cat << 'EOF' > main.swift
-          import Foundation
-          print("NabeeCode App Loaded")
-          EOF
+          # 4. สร้าง Executable Binary ปลอมเพื่อให้โครงสร้างแอปสมบูรณ์
+          if [ ! -f "$APP_DIR/NabeeCode" ]; then
+            cat << 'EOF' > main.swift
+            import Foundation
+            print("NabeeCode App Loaded")
+            EOF
+            swiftc -target arm64-apple-ios15.0-simulator main.swift -o "$APP_DIR/NabeeCode" || true
+            rm main.swift
+          fi
 
-          swiftc -target arm64-apple-ios15.0-simulator main.swift -o "$APP_DIR/NabeeCode" || true
-
-          cd build/IPA
-          zip -r Unsigned_App.ipa Payload
+          # 5. บีบอัด Payload เป็นไฟล์ .ipa
+          cd build
+          zip -r NabeeCode.ipa Payload
           echo "Build Completed Successfully"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Unsigned-IPA-for-Gbox
-          path: build/IPA/Unsigned_App.ipa
+          name: NabeeCode-IPA
+          path: build/NabeeCode.ipa
