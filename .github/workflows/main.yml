@@ -15,43 +15,39 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Create Unsigned App Package & Build IPA
+      - name: Package IPA Structure correctly
         run: |
-          # 1. เคลียร์โฟลเดอร์เก่าและสร้างโครงสร้าง Payload/NabeeCode.app
+          # 1. ล้างไดเรกทอรี build เก่า
           rm -rf build
+          
+          # 2. สร้างโครงสร้างตามมาตรฐาน iOS: Payload/NabeeCode.app
           mkdir -p build/Payload/NabeeCode.app
           APP_DIR="build/Payload/NabeeCode.app"
 
-          # 2. คัดลอกไฟล์ทั้งหมดใน Repo เข้าไปในโฟลเดอร์แอป
-          find . -maxdepth 2 -type f ! -path "./build/*" ! -path "./.git/*" ! -path "./.github/*" -exec cp {} "$APP_DIR/" \;
+          # 3. คัดลอกไฟล์ทั้งหมดจาก Repository เข้าไปไว้ในตัวแอป
+          cp -R ./* "$APP_DIR/" 2>/dev/null || true
+          
+          # ลบโฟลเดอร์ขยะของ GitHub ออกจากตัวแอป
+          rm -rf "$APP_DIR/build" "$APP_DIR/.git" "$APP_DIR/.github"
 
-          # คัดลอกโฟลเดอร์ภาษาหรือทรัพยากร (ถ้ามี)
-          find . -maxdepth 1 -type d ! -name "build" ! -name ".git" ! -name ".github" ! -name "." -exec cp -r {} "$APP_DIR/" \;
-
-          # 3. จัดการให้ Info.plist อยู่ที่ชั้นนอกสุดของ .app เสมอ
-          INFOPLIST_PATH=$(find . -name "Info.plist" | head -n 1)
-          if [ -n "$INFOPLIST_PATH" ]; then
-            cp "$INFOPLIST_PATH" "$APP_DIR/Info.plist"
-            echo "Copied Info.plist from $INFOPLIST_PATH to $APP_DIR/Info.plist"
+          # 4. ตรวจสอบให้มั่นใจว่าไฟล์ Info.plist อยู่นอกสุดของโฟลเดอร์ .app
+          FIND_PLIST=$(find . -name "Info.plist" -not -path "./build/*" | head -n 1)
+          if [ -n "$FIND_PLIST" ]; then
+            cp "$FIND_PLIST" "$APP_DIR/Info.plist"
           fi
 
-          # 4. สร้าง Executable Binary ให้ตรงตามสถาปัตยกรรม arm64
+          # 5. สร้าง Executable Binary พื้นฐานเพื่อเปิดตัวแอป
           echo "import Foundation" > main.swift
-          echo 'print("NabeeCode App Loaded")' >> main.swift
+          echo 'print("App Loaded")' >> main.swift
           swiftc -target arm64-apple-ios15.0 main.swift -o "$APP_DIR/NabeeCode" || true
           rm -f main.swift
 
-          # 5. ตรวจสอบโครงสร้างไฟล์ก่อนบีบอัด
-          echo "=== App Structure Check ==="
-          ls -la "$APP_DIR"
-
-          # 6. บีบอัดโฟลเดอร์ Payload เป็นไฟล์ .ipa
+          # 6. บีบอัดเฉพาะโฟลเดอร์ Payload เป็นไฟล์ nextra.ipa
           cd build
-          zip -r NabeeCode.ipa Payload
-          echo "Build Completed Successfully"
+          zip -r -9 nextra.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NabeeCode-IPA
-          path: build/NabeeCode.ipa
+          name: cracknabee-ipa
+          path: build/nextra.ipa
